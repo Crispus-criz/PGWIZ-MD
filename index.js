@@ -28,6 +28,7 @@ const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/
 const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await, sleep, reSize } = require('./lib/myfunc');
 const {
     default: makeWASocket,
+    useMultiFileAuthState,
     DisconnectReason,
     fetchLatestBaileysVersion,
     generateForwardMessageContent,
@@ -54,7 +55,6 @@ const store = require('./lib/lightweight_store');
 const SaveCreds = require('./lib/session');
 const { app, server, PORT } = require('./lib/server');
 const { printLog } = require('./lib/print');
-const { useSQLiteAuthState } = require('./lib/sqliteAuthState');
 const {
     handleMessages,
     handleGroupParticipantUpdate,
@@ -225,7 +225,7 @@ async function startQasimDev() {
         ensureSessionDirectory();
         await delay(1000);
 
-        const { state, saveCreds } = await useSQLiteAuthState();
+        const { state, saveCreds } = await useMultiFileAuthState(`./session`);
         const msgRetryCounterCache = new NodeCache();
 
         const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
