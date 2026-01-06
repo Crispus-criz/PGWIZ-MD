@@ -81,10 +81,15 @@ async function isStatusReactionEnabled() {
 
 async function reactToStatus(sock, statusKey) {
     try {
+        console.log('[AUTOSTATUS DEBUG] reactToStatus called with key:', JSON.stringify(statusKey));
         const enabled = await isStatusReactionEnabled();
+        console.log('[AUTOSTATUS DEBUG] Reaction enabled:', enabled);
         if (!enabled) {
             return;
         }
+
+        const emoji = getRandomStatusEmoji();
+        console.log('[AUTOSTATUS DEBUG] Using emoji:', emoji);
 
         await sock.relayMessage(
             'status@broadcast',
@@ -96,7 +101,7 @@ async function reactToStatus(sock, statusKey) {
                         participant: statusKey.participant || statusKey.remoteJid,
                         fromMe: false
                     },
-                    text: getRandomStatusEmoji()
+                    text: emoji
                 }
             },
             {
@@ -105,31 +110,40 @@ async function reactToStatus(sock, statusKey) {
             }
         );
 
-        console.log('✅ Reacted to status');
+        console.log('[AUTOSTATUS] ✅ Reacted to status with', emoji);
     } catch (error) {
-        console.error('❌ Error reacting to status:', error.message);
+        console.error('[AUTOSTATUS] ❌ Error reacting to status:', error.message);
+        console.error('[AUTOSTATUS DEBUG] Full error:', error);
     }
 }
 
 async function handleStatusUpdate(sock, status) {
     try {
+        console.log('[AUTOSTATUS DEBUG] handleStatusUpdate called');
+        console.log('[AUTOSTATUS DEBUG] Status object keys:', Object.keys(status));
+
         const enabled = await isAutoStatusEnabled();
+        console.log('[AUTOSTATUS DEBUG] AutoStatus enabled:', enabled);
         if (!enabled) {
+            console.log('[AUTOSTATUS DEBUG] AutoStatus is disabled, skipping');
             return;
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         if (status.messages && status.messages.length > 0) {
             const msg = status.messages[0];
+            console.log('[AUTOSTATUS DEBUG] Found message, remoteJid:', msg.key?.remoteJid);
             if (msg.key && msg.key.remoteJid === 'status@broadcast') {
                 try {
+                    console.log('[AUTOSTATUS DEBUG] Attempting to read status message');
                     await sock.readMessages([msg.key]);
-                    console.log('✅ Viewed status from messages');
+                    console.log('[AUTOSTATUS] ✅ Viewed status from messages');
 
                     await reactToStatus(sock, msg.key);
                 } catch (err) {
+                    console.error('[AUTOSTATUS DEBUG] Error reading message:', err.message);
                     if (err.message?.includes('rate-overlimit')) {
-                        console.log('⚠️ Rate limit hit, waiting before retrying...');
+                        console.log('[AUTOSTATUS] ⚠️ Rate limit hit, waiting before retrying...');
                         await new Promise(resolve => setTimeout(resolve, 2000));
                         await sock.readMessages([msg.key]);
                     } else {
@@ -142,13 +156,15 @@ async function handleStatusUpdate(sock, status) {
 
         if (status.key && status.key.remoteJid === 'status@broadcast') {
             try {
+                console.log('[AUTOSTATUS DEBUG] Attempting to read from status.key');
                 await sock.readMessages([status.key]);
-                console.log('✅ Viewed status from key');
+                console.log('[AUTOSTATUS] ✅ Viewed status from key');
 
                 await reactToStatus(sock, status.key);
             } catch (err) {
+                console.error('[AUTOSTATUS DEBUG] Error reading from key:', err.message);
                 if (err.message?.includes('rate-overlimit')) {
-                    console.log('⚠️ Rate limit hit, waiting before retrying...');
+                    console.log('[AUTOSTATUS] ⚠️ Rate limit hit, waiting before retrying...');
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await sock.readMessages([status.key]);
                 } else {
@@ -159,13 +175,15 @@ async function handleStatusUpdate(sock, status) {
         }
         if (status.reaction && status.reaction.key.remoteJid === 'status@broadcast') {
             try {
+                console.log('[AUTOSTATUS DEBUG] Attempting to read from reaction');
                 await sock.readMessages([status.reaction.key]);
-                console.log('✅ Viewed status from reaction');
+                console.log('[AUTOSTATUS] ✅ Viewed status from reaction');
 
                 await reactToStatus(sock, status.reaction.key);
             } catch (err) {
+                console.error('[AUTOSTATUS DEBUG] Error reading from reaction:', err.message);
                 if (err.message?.includes('rate-overlimit')) {
-                    console.log('⚠️ Rate limit hit, waiting before retrying...');
+                    console.log('[AUTOSTATUS] ⚠️ Rate limit hit, waiting before retrying...');
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await sock.readMessages([status.reaction.key]);
                 } else {
@@ -175,8 +193,11 @@ async function handleStatusUpdate(sock, status) {
             return;
         }
 
+        console.log('[AUTOSTATUS DEBUG] No status to process found in the update');
+
     } catch (error) {
-        console.error('❌ Error in auto status view:', error.message);
+        console.error('[AUTOSTATUS] ❌ Error in auto status view:', error.message);
+        console.error('[AUTOSTATUS DEBUG] Full error:', error);
     }
 }
 
