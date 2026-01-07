@@ -1,5 +1,5 @@
 const settings = {
-  prefixes: ['.', '!', '/', '#'], // Multiple prefix support you can add one or more
+  prefixes: ['.', '!', '/', '#', '_'], // Multiple prefix support you can add one or more
   packname: 'PGWIZ-MD',
   author: '‎pgwiz',
   timeZone: 'Asia/Karachi',
