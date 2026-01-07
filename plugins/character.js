@@ -1,4 +1,3 @@
-```javascript
 const { channelInfo } = require('../lib/messageConfig');
 const axios = require('axios');
 const settings = require('../settings');
@@ -21,9 +20,9 @@ module.exports = {
     }
 
     if (!userToAnalyze) {
-      return await sock.sendMessage(chatId, { 
-        text: '❌ Please mention someone or reply to their message to analyze their character!', 
-        ...channelInfo 
+      return await sock.sendMessage(chatId, {
+        text: '❌ Please mention someone or reply to their message to analyze their character!',
+        ...channelInfo
       }, { quoted: message });
     }
 
@@ -36,12 +35,12 @@ module.exports = {
       }
 
       const traits = [
-        "Intelligent","Creative","Determined","Ambitious","Caring",
-        "Charismatic","Confident","Empathetic","Energetic","Friendly",
-        "Generous","Honest","Humorous","Imaginative","Independent",
-        "Intuitive","Kind","Logical","Loyal","Optimistic",
-        "Passionate","Patient","Persistent","Reliable","Resourceful",
-        "Sincere","Thoughtful","Understanding","Versatile","Wise"
+        "Intelligent", "Creative", "Determined", "Ambitious", "Caring",
+        "Charismatic", "Confident", "Empathetic", "Energetic", "Friendly",
+        "Generous", "Honest", "Humorous", "Imaginative", "Independent",
+        "Intuitive", "Kind", "Logical", "Loyal", "Optimistic",
+        "Passionate", "Patient", "Persistent", "Reliable", "Resourceful",
+        "Sincere", "Thoughtful", "Understanding", "Versatile", "Wise"
       ];
 
       const numTraits = Math.floor(Math.random() * 3) + 3;
@@ -51,11 +50,11 @@ module.exports = {
         if (!selectedTraits.includes(randomTrait)) selectedTraits.push(randomTrait);
       }
 
-      const traitPercentages = selectedTraits.map(trait => `${ trait }: ${ Math.floor(Math.random() * 41) + 60 }% `);
+      const traitPercentages = selectedTraits.map(trait => `${trait}: ${Math.floor(Math.random() * 41) + 60}% `);
       const analysis = `🔮 * Character Analysis * 🔮\n\n` +
-        `👤 * User:* ${ userToAnalyze.split('@')[0] } \n\n` +
-        `✨ * Key Traits:*\n${ traitPercentages.join('\n') } \n\n` +
-        `🎯 * Overall Rating:* ${ Math.floor(Math.random() * 21) + 80 }%\n\n` +
+        `👤 * User:* ${userToAnalyze.split('@')[0]} \n\n` +
+        `✨ * Key Traits:*\n${traitPercentages.join('\n')} \n\n` +
+        `🎯 * Overall Rating:* ${Math.floor(Math.random() * 21) + 80}%\n\n` +
         `Note: This is a fun analysis and should not be taken seriously!`;
 
       await sock.sendMessage(chatId, {
@@ -66,9 +65,9 @@ module.exports = {
       }, { quoted: message });
 
     } catch {
-      await sock.sendMessage(chatId, { 
+      await sock.sendMessage(chatId, {
         text: '❌ Failed to analyze character! Try again later.',
-        ...channelInfo 
+        ...channelInfo
       }, { quoted: message });
     }
   }
