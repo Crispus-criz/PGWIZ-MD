@@ -1,4 +1,6 @@
 const Qasim = require('api-qasim');
+const google = require('google-it');
+const settings = require('../settings');
 const { channelInfo } = require('../lib/messageConfig');
 
 module.exports = {
@@ -15,7 +17,7 @@ module.exports = {
     if (!query) {
       return await sock.sendMessage(chatId, {
         text: '*Please provide a query (e.g., story title, author, or tag).*' +
-              `\nExample: .wattpad The Hunger Games`,
+          `\nExample: .wattpad The Hunger Games`,
         ...channelInfo
       }, { quoted: message });
     }

@@ -1,4 +1,7 @@
+```javascript
 const { channelInfo } = require('../lib/messageConfig');
+const axios = require('axios');
+const settings = require('../settings');
 
 module.exports = {
   command: 'character',
@@ -48,11 +51,11 @@ module.exports = {
         if (!selectedTraits.includes(randomTrait)) selectedTraits.push(randomTrait);
       }
 
-      const traitPercentages = selectedTraits.map(trait => `${trait}: ${Math.floor(Math.random() * 41) + 60}%`);
-      const analysis = `🔮 *Character Analysis* 🔮\n\n` +
-        `👤 *User:* ${userToAnalyze.split('@')[0]}\n\n` +
-        `✨ *Key Traits:*\n${traitPercentages.join('\n')}\n\n` +
-        `🎯 *Overall Rating:* ${Math.floor(Math.random() * 21) + 80}%\n\n` +
+      const traitPercentages = selectedTraits.map(trait => `${ trait }: ${ Math.floor(Math.random() * 41) + 60 }% `);
+      const analysis = `🔮 * Character Analysis * 🔮\n\n` +
+        `👤 * User:* ${ userToAnalyze.split('@')[0] } \n\n` +
+        `✨ * Key Traits:*\n${ traitPercentages.join('\n') } \n\n` +
+        `🎯 * Overall Rating:* ${ Math.floor(Math.random() * 21) + 80 }%\n\n` +
         `Note: This is a fun analysis and should not be taken seriously!`;
 
       await sock.sendMessage(chatId, {

@@ -1,4 +1,5 @@
 const axios = require('axios');
+const settings = require('../settings');
 const { channelInfo } = require('../lib/messageConfig');
 
 module.exports = {
