@@ -1,5 +1,5 @@
 {
-  "name": "mega",
+  "name": "pgwiz-md",
   "version": "5.1.0",
   "description": "WhatsApp Bot",
   "main": "index.js",
@@ -9,10 +9,10 @@
     "plugins": "plugins"
   },
   "scripts": {
-    "start": "pm2 start index.js --name mega --update-env --time",
-    "stop": "pm2 stop mega",
-    "restart": "pm2 restart mega",
-    "logs": "pm2 logs mega",
+    "start": "pm2 start index.js --name PGWIZ-MD --update-env --time",
+    "stop": "pm2 stop PGWIZ-MD",
+    "restart": "pm2 restart PGWIZ-MD",
+    "logs": "pm2 logs PGWIZ-MD",
     "dev": "nodemon index.js",
     "check": "node -e \"require('syntax-error'); console.log('Syntax checker ready')\"",
     "lint": "node test.js",
