@@ -1,15 +1,27 @@
 /* process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; */
 
-// Suppress Baileys internal session debug logs
+// Suppress Baileys internal session/prekey debug logs
 const originalConsoleLog = console.log;
 console.log = (...args) => {
     const msg = args[0];
-    if (typeof msg === 'string' && (msg.includes('Closing session') || msg.includes('SessionEntry'))) {
-        return; // Suppress Baileys session debug output
+
+    // Suppress string-based session logs
+    if (typeof msg === 'string' && (
+        msg.includes('Closing session') ||
+        msg.includes('SessionEntry') ||
+        msg.includes('_chains') ||
+        msg.includes('registrationId')
+    )) {
+        return;
     }
-    if (args[0] && typeof args[0] === 'object' && args[0].constructor?.name === 'SessionEntry') {
-        return; // Suppress SessionEntry object dumps
+
+    // Suppress object dumps (SessionEntry, prekeys, ratchets)
+    if (msg && typeof msg === 'object') {
+        if (msg.constructor?.name === 'SessionEntry') return;
+        if (msg._chains || msg.currentRatchet || msg.registrationId) return;
+        if (Buffer.isBuffer(msg)) return;
     }
+
     originalConsoleLog.apply(console, args);
 };
 
