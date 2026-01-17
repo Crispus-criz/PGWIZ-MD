@@ -559,6 +559,21 @@ async function startQasimDev() {
                 printLog('connection', 'Connecting to WhatsApp...');
             }
 
+            if (connection === 'close') {
+                const reason = lastDisconnect?.error?.output?.statusCode;
+                const errorName = lastDisconnect?.error?.message || 'Unknown Error';
+
+                printLog('error', `Connection closed - Status:${reason} (${errorName})`);
+
+                if (reason === 440) { // Conflict / Duplicate Session
+                    console.log(chalk.bold.redBright(`⚠️  SESSION CONFLICT (Status 440)`));
+                    console.log(chalk.red(`   Another instance is already using this session.`));
+                    console.log(chalk.red(`   Please stop other running bots (Local, Koyeb, etc).`));
+                } else if (reason === 401) { // Logged out
+                    console.log(chalk.redBright(`⚠️  Session Logged Out. Please re-pair.`));
+                }
+            }
+
             if (connection == "open") {
                 printLog('success', 'Bot connected successfully!');
                 const { startAutoBio } = require('./plugins/a-setbio');
