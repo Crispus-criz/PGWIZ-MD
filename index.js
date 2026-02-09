@@ -379,7 +379,8 @@ async function startQasimDev() {
         await delay(1000);
 
         const { state, saveCreds } = await useMultiFileAuthState(`./session`);
-        const msgRetryCounterCache = new NodeCache();
+        // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
 
         const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
@@ -404,12 +405,23 @@ async function startQasimDev() {
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
-            retryRequestDelayMs: 5000, // Wait 5s before retrying failed requests
-            fireInitQueries: true, // Ensure we fire init queries on connect
+            retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
+            fireInitQueries: false, // DISABLED: Don't wait for message history on startup - causes "waiting for message" hang
             getMessage: async (key) => {
-                let jid = jidNormalizedUser(key.remoteJid);
-                let msg = await store.loadMessage(jid, key.id);
-                return msg?.message || "";
+                try {
+                    // Add a 3 second timeout so we don't get stuck waiting for old messages
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    );
+
+                    let jid = jidNormalizedUser(key.remoteJid);
+                    const loadPromise = store.loadMessage(jid, key.id);
+                    const msg = await Promise.race([loadPromise, timeoutPromise]);
+                    return msg?.message || "";
+                } catch (err) {
+                    // If timeout or error, return empty string - Baileys will skip this message
+                    return "";
+                }
             },
             msgRetryCounterCache,
             defaultQueryTimeoutMs: 60000,
