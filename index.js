@@ -7,7 +7,7 @@ const path = require('path');
 let lastSessionClear = 0;
 function autoSessionClear() {
     const now = Date.now();
-    if (now - lastSessionClear < 60000) return; // Rate limit: once per minute
+    if (now - lastSessionClear < 120000) return; // Rate limit: once per 2 minutes
     lastSessionClear = now;
 
     const sessionDir = path.join(__dirname, 'session');
@@ -17,106 +17,126 @@ function autoSessionClear() {
         const files = fs.readdirSync(sessionDir);
         let cleared = 0;
         for (const file of files) {
-            if (file === 'creds.json') continue; // Keep main credentials
+            // Only keep creds.json - clear everything else including auth files
+            if (file === 'creds.json') continue;
             try {
                 fs.unlinkSync(path.join(sessionDir, file));
                 cleared++;
             } catch { }
         }
         if (cleared > 0) {
-            console.log(`[AUTO-REPAIR] Cleared ${cleared} corrupted session files`);
+            console.log(`[AUTO-REPAIR] Cleared ${cleared} corrupted session files - Session will re-initialize on next connection`);
+            // Force exit so PM2/systemd can restart with clean state
+            console.log(`[AUTO-REPAIR] Restarting bot in 3 seconds for clean recovery...`);
+            setTimeout(() => {
+                process.exit(0);
+            }, 3000);
         }
     } catch { }
 }
 
-// Suppress Baileys internal session/prekey/BadMAC logs
+// Stream-level suppression disabled on Koyeb/container platforms to prevent log duplication
+// The console.log/error/warn overrides are sufficient for suppressing encryption logs
+// On Koyeb, stream-level overrides cause output duplication in the custom logging layer
+
+// Suppress Baileys internal session/prekey/BadMAC logs - AGGRESSIVE suppression
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
+// Keywords that should be completely suppressed (as Set for faster lookup)
+const SUPPRESS_KEYWORDS = new Set([
+    'closing session', 'sessionentry', '_chains', 'registrationid', 'pendingprekey',
+    'currentratchet', 'indexinfo', 'ephemeralkeypair', 'lastremoteephemeralkey',
+    'basekey', 'chainkey', 'chaintype', 'messagekeys', 'signal key',
+    'decrypt error', 'failed to decrypt', 'bad mac', 'session error',
+    'messagecountererror', 'decrypted message', 'curve25519', 'hkdf-sha256',
+    'prekey', 'signedprekey', 'identity key', 'ratchet', 'rootkey', 'noisekey',
+    'signedbundle', 'xmppframing', 'sending presence', 'message counter'
+]);
+
+const shouldSuppress = (args) => {
+    // First, check if any argument is a SessionEntry-like object or Buffer key
+    for (const arg of args) {
+        if (!arg) continue;
+
+        if (typeof arg === 'object') {
+            const name = arg.constructor?.name || '';
+
+            // Direct object type checks
+            if (name.includes('SessionEntry') || name.includes('Session') ||
+                name.includes('Ratchet') || name.includes('Signal')) {
+                return true;
+            }
+
+            // Check for session-related properties
+            if (arg._chains || arg.currentRatchet || arg.registrationId || arg.pendingPreKey ||
+                arg.ephemeralKeyPair || arg.lastRemoteEphemeralKey || arg.rootKey || arg.keyPair ||
+                arg.noiseKey || arg.signedPreKey || arg.signedIdentityKey) {
+                return true;
+            }
+
+            // Suppress large Buffers (likely encryption keys, > 20 bytes)
+            if (Buffer.isBuffer(arg) && arg.length > 20) {
+                return true;
+            }
+        }
+    }
+
+    // Check string arguments for suppression keywords
+    for (const arg of args) {
+        if (typeof arg !== 'string') continue;
+
+        const lower = arg.toLowerCase();
+
+        // Check for any suppression keyword
+        for (const keyword of SUPPRESS_KEYWORDS) {
+            if (lower.includes(keyword)) return true;
+        }
+
+        // Suppress things that look like object stringifications
+        if (lower.includes('<buffer') || lower.includes('pubkey') || lower.includes('privkey')) {
+            return true;
+        }
+    }
+
+    return false;
+};
 
 console.log = (...args) => {
-    // First pass: Check for objects that should be suppressed (before string conversion)
-    for (const arg of args) {
-        if (arg && typeof arg === 'object') {
-            // Suppress SessionEntry objects completely
-            if (arg.constructor?.name === 'SessionEntry') {
-                return; // Completely suppress, don't even show registrationId
-            }
-            // Suppress any object with session-related properties
-            if (arg._chains || arg.currentRatchet || (arg.registrationId && arg.indexInfo) || arg.pendingPreKey) {
-                return;
-            }
-            // Suppress Buffer objects
-            if (Buffer.isBuffer(arg)) return;
-
-            // Suppress objects with ephemeralKeyPair (session ratchet data)
-            if (arg.ephemeralKeyPair || arg.lastRemoteEphemeralKey || arg.rootKey) return;
-        }
-    }
-
-    // Second pass: Check string arguments
-    for (const arg of args) {
-        if (typeof arg === 'string' && (
-            arg.includes('Closing session') ||
-            arg.includes('SessionEntry') ||
-            arg.includes('_chains') ||
-            arg.includes('registrationId') ||
-            arg.includes('pendingPreKey') ||
-            arg.includes('currentRatchet') ||
-            arg.includes('indexInfo') ||
-            arg.includes('ephemeralKeyPair') ||
-            arg.includes('lastRemoteEphemeralKey') ||
-            arg.includes('baseKey') ||
-            arg.includes('chainKey') ||
-            arg.includes('chainType') ||
-            arg.includes('messageKeys')
-        )) {
-            return;
-        }
-    }
-
+    if (shouldSuppress(args)) return;
     originalConsoleLog.apply(console, args);
 };
 
 console.error = (...args) => {
-    // First pass: Check for objects that should be suppressed
-    for (const arg of args) {
-        if (arg && typeof arg === 'object') {
-            // Suppress SessionEntry objects
-            if (arg.constructor?.name === 'SessionEntry') return;
-            // Suppress session-related objects
-            if (arg._chains || arg.currentRatchet || (arg.registrationId && arg.indexInfo) || arg.pendingPreKey) return;
-            if (Buffer.isBuffer(arg)) return;
-            if (arg.ephemeralKeyPair || arg.lastRemoteEphemeralKey || arg.rootKey) return;
+    if (shouldSuppress(args)) {
+        // Auto-repair on Bad MAC errors
+        const badMacFound = args.some(arg =>
+            typeof arg === 'string' && arg.toLowerCase().includes('bad mac')
+        );
+        if (badMacFound) {
+            autoSessionClear();
         }
+        return;
     }
-
-    // Second pass: Check string arguments for session-related content
-    for (const arg of args) {
-        if (typeof arg === 'string' && (
-            arg.includes('Bad MAC') ||
-            arg.includes('Session error') ||
-            arg.includes('Failed to decrypt') ||
-            arg.includes('MessageCounterError') ||
-            arg.includes('Closing session') ||
-            arg.includes('SessionEntry') ||
-            arg.includes('Decrypted message') ||
-            arg.includes('_chains') ||
-            arg.includes('currentRatchet') ||
-            arg.includes('pendingPreKey')
-        )) {
-            if (arg.includes('Bad MAC')) {
-                autoSessionClear(); // Auto-repair
-            }
-            return; // Suppress the log
-        }
-    }
-
     originalConsoleError.apply(console, args);
+};
+
+console.warn = (...args) => {
+    if (shouldSuppress(args)) return;
+    originalConsoleWarn.apply(console, args);
 };
 
 
 require('./config');
 require('./settings');
+
+const { Writable } = require('stream');
+
+// Create a null stream that discards all output for Pino
+const nullStream = new Writable({
+    write() {} // Do nothing - discard all output
+});
 
 const { Boom } = require('@hapi/boom');
 const chalk = require('chalk');
@@ -292,31 +312,36 @@ async function initializeSession() {
         return false;
     }
 
-    if (hasValidSession()) {
-        return true;
-    }
-
+    // Always refresh session from service to prevent staleness
     try {
+        printLog('info', 'Refreshing session credentials from PGWIZ service...');
         await SaveCreds(txt);
-        await delay(2000);
+        await delay(1500);
 
         if (hasValidSession()) {
-            printLog('success', 'Session file verified and valid');
-            await delay(1000);
+            printLog('success', 'Session refreshed and verified');
+            await delay(500);
             return true;
         } else {
-            printLog('error', 'Session file not valid after download');
+            printLog('error', 'Session file not valid after refresh');
             return false;
         }
     } catch (error) {
-        printLog('error', `Error downloading session: ${error.message}`);
+        printLog('error', `Error refreshing session: ${error.message}`);
+        // Fall back to existing session if available
+        if (hasValidSession()) {
+            printLog('warning', 'Using existing session (refresh failed)');
+            return true;
+        }
         return false;
     }
 }
 
-server.listen(PORT, () => {
-    printLog('success', `Server listening on port ${PORT}`);
-});
+if (!server.listening) {
+    server.listen(PORT, () => {
+        printLog('success', `Server listening on port ${PORT}`);
+    });
+}
 
 async function startQasimDev() {
     try {
@@ -326,7 +351,8 @@ async function startQasimDev() {
         await delay(1000);
 
         const { state, saveCreds } = await useMultiFileAuthState(`./session`);
-        const msgRetryCounterCache = new NodeCache();
+        // Create retry counter cache with short TTL (10 seconds) so old messages don't stay cached
+        const msgRetryCounterCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
 
         const hasRegisteredCreds = state.creds && state.creds.registered !== undefined;
         printLog('info', `Credentials loaded. Registered: ${state.creds?.registered || false}`);
@@ -340,23 +366,34 @@ async function startQasimDev() {
 
         const QasimDev = makeWASocket({
             version,
-            logger: pino({ level: 'silent' }), // Keep silent logger to reduce noise
+            logger: pino({ level: 'silent' }, nullStream), // Silent logger with null stream
             printQRInTerminal: !pairingCode,
             browser: Browsers.ubuntu('Chrome'), // Better for Linux/PM2 servers
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" })),
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "silent" }, nullStream)),
             },
             markOnlineOnConnect: !isGhostActive,
             generateHighQualityLinkPreview: true,
             syncFullHistory: false,
             shouldSyncHistoryMessage: () => false, // Disable history sync for real-time only
-            retryRequestDelayMs: 5000, // Wait 5s before retrying failed requests
-            fireInitQueries: true, // Ensure we fire init queries on connect
+            retryRequestDelayMs: 2000, // Reduce retry delay from 5s to 2s
+            fireInitQueries: false, // DISABLED: Don't wait for message history on startup - causes "waiting for message" hang
             getMessage: async (key) => {
-                let jid = jidNormalizedUser(key.remoteJid);
-                let msg = await store.loadMessage(jid, key.id);
-                return msg?.message || "";
+                try {
+                    // Add a 3 second timeout so we don't get stuck waiting for old messages
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), 3000)
+                    );
+
+                    let jid = jidNormalizedUser(key.remoteJid);
+                    const loadPromise = store.loadMessage(jid, key.id);
+                    const msg = await Promise.race([loadPromise, timeoutPromise]);
+                    return msg?.message || "";
+                } catch (err) {
+                    // If timeout or error, return empty string - Baileys will skip this message
+                    return "";
+                }
             },
             msgRetryCounterCache,
             defaultQueryTimeoutMs: 60000,
@@ -605,6 +642,10 @@ async function startQasimDev() {
                     console.log(chalk.bold.redBright(`⚠️  SESSION CONFLICT (Status 440)`));
                     console.log(chalk.red(`   Another instance is already using this session.`));
                     console.log(chalk.red(`   Please stop other running bots (Local, Koyeb, etc).`));
+                    console.log(chalk.red(`   Waiting 30 seconds before reconnect attempt...`));
+                    // For 440 errors, wait much longer and exit aggressively
+                    await delay(30000);
+                    process.exit(1); // Force restart to clear socket state
                 } else if (reason === 401) { // Logged out
                     console.log(chalk.redBright(`⚠️  Session Logged Out. Please re-pair.`));
                 }
@@ -675,9 +716,11 @@ async function startQasimDev() {
                     }
                 }
 
-                if (shouldReconnect) {
-                    printLog('connection', 'Reconnecting in 5 seconds...');
-                    await delay(5000);
+                // For non-440 errors, use exponential backoff
+                if (shouldReconnect && statusCode !== 440) {
+                    const waitTime = 8000; // Wait 8 seconds for other errors
+                    printLog('connection', `Reconnecting in ${waitTime/1000} seconds...`);
+                    await delay(waitTime);
                     startQasimDev();
                 }
             }
